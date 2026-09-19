@@ -32,6 +32,15 @@ const plans = [
   { name: 'Premium', price: 6000, durationDays: 30, listingLimit: 9999, featuredIncluded: true },
 ];
 
+// The 25 administrative districts of Sri Lanka.
+const districts = [
+  'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya',
+  'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar',
+  'Vavuniya', 'Mullaitivu', 'Batticaloa', 'Ampara', 'Trincomalee',
+  'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla',
+  'Monaragala', 'Ratnapura', 'Kegalle',
+];
+
 async function main() {
   for (const c of categories) {
     await prisma.category.upsert({ where: { slug: c.slug }, update: c, create: c });
@@ -49,9 +58,14 @@ async function main() {
     }
   }
 
+  for (const name of districts) {
+    await prisma.district.upsert({ where: { name }, update: {}, create: { name } });
+  }
+
   // eslint-disable-next-line no-console
   console.log(
-    `Seeded ${categories.length} categories, ${amenities.length} amenities, ${plans.length} plans.`,
+    `Seeded ${categories.length} categories, ${amenities.length} amenities, ` +
+      `${plans.length} plans, ${districts.length} districts.`,
   );
 }
 

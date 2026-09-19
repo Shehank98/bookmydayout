@@ -55,6 +55,11 @@ enum ReportStatus {
   actioned
 }
 
+enum ContactChannel {
+  call
+  whatsapp
+}
+
 // ------------------------------------------------------------------
 // Users
 // ------------------------------------------------------------------
@@ -70,7 +75,8 @@ model User {
 
   vendor    Vendor?
   favorites Favorite[]
-  reports   Report[]   @relation("ReportedBy")
+  reports   Report[]       @relation("ReportedBy")
+  contacts  ContactEvent[]
 
   @@map("users")
 }
@@ -189,6 +195,7 @@ model Listing {
   amenities ListingAmenity[]
   favorites Favorite[]
   reports   Report[]
+  contacts  ContactEvent[]
 
   @@index([status])
   @@index([district])
@@ -255,4 +262,52 @@ model Report {
 
   @@index([status])
   @@map("reports")
+}
+
+// ------------------------------------------------------------------
+// Contact events — records when a user clicks call/WhatsApp on a
+// listing. Powers "contact history" for users, the contact_click_count
+// on listings, and vendor analytics. userId is null for guests.
+// ------------------------------------------------------------------
+
+model ContactEvent {
+  id        String         @id @default(uuid()) @db.Uuid
+  listingId String         @map("listing_id") @db.Uuid
+  userId    String?        @map("user_id") @db.Uuid
+  channel   ContactChannel
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([listingId])
+  @@index([userId])
+  @@map("contact_events")
+}
+
+// ------------------------------------------------------------------
+// Districts (Sri Lanka) — admin-manageable filter list.
+// Listings store district as free text, matched against name here.
+// ------------------------------------------------------------------
+
+model District {
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String  @unique
+  isActive Boolean @default(true) @map("is_active")
+
+  @@map("districts")
+}
+
+// ------------------------------------------------------------------
+// Site-wide banners / announcements (admin-managed).
+// ------------------------------------------------------------------
+
+model Banner {
+  id        String   @id @default(uuid()) @db.Uuid
+  message   String
+  linkUrl   String?  @map("link_url")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("banners")
 }

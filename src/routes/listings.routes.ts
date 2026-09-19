@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { notFound } from '../lib/http-error.js';
+import { optionalAuth } from '../middleware/auth.js';
+import { asyncHandler } from '../lib/utils.js';
 
 /**
  * PUBLIC listings routes (read-only). Only APPROVED listings are ever exposed
@@ -107,3 +109,65 @@ listingsRouter.get('/:slug', async (req, res, next) => {
     next(err);
   }
 });
+
+// --- Server-side counters & reporting (guests allowed; user attached if logged in) ---
+
+async function findApprovedListing(id: string) {
+  const listing = await prisma.listing.findFirst({ where: { id, status: 'approved' } });
+  if (!listing) throw notFound('Listing not found.');
+  return listing;
+}
+
+// POST /api/listings/:id/view — increment view count (not client-writable field).
+listingsRouter.post(
+  '/:id/view',
+  asyncHandler(async (req, res) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    await findApprovedListing(id);
+    const updated = await prisma.listing.update({
+      where: { id },
+      data: { viewCount: { increment: 1 } },
+      select: { viewCount: true },
+    });
+    res.json({ ok: true, viewCount: updated.viewCount });
+  }),
+);
+
+// POST /api/listings/:id/contact — record a call/WhatsApp click.
+listingsRouter.post(
+  '/:id/contact',
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const { channel } = z.object({ channel: z.enum(['call', 'whatsapp']) }).parse(req.body);
+    await findApprovedListing(id);
+
+    await prisma.$transaction([
+      prisma.contactEvent.create({
+        data: { listingId: id, channel, userId: req.user?.id ?? null },
+      }),
+      prisma.listing.update({
+        where: { id },
+        data: { contactClickCount: { increment: 1 } },
+      }),
+    ]);
+
+    res.status(201).json({ ok: true });
+  }),
+);
+
+// POST /api/listings/:id/report — flag a listing for admin review.
+listingsRouter.post(
+  '/:id/report',
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const { reason } = z.object({ reason: z.string().trim().min(3).max(1000) }).parse(req.body);
+    await findApprovedListing(id);
+
+    const report = await prisma.report.create({
+      data: { listingId: id, reason, reportedBy: req.user?.id ?? null },
+    });
+    res.status(201).json({ data: report });
+  }),
+);
