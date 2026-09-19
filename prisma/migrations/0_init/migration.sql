@@ -92,6 +92,7 @@ CREATE TABLE "listings" (
     "district" TEXT,
     "lat" DECIMAL(10,7),
     "lng" DECIMAL(10,7),
+    "map_url" TEXT,
     "price" DECIMAL(12,2),
     "price_unit" TEXT,
     "capacity" INTEGER,

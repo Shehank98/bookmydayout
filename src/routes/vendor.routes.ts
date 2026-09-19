@@ -115,6 +115,7 @@ const listingBody = z.object({
   district: z.string().trim().max(80).optional(),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
+  mapUrl: z.string().url().max(500).optional(),
   price: z.number().nonnegative().optional(),
   priceUnit: z.string().trim().max(30).optional(),
   capacity: z.number().int().positive().optional(),

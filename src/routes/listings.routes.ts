@@ -19,6 +19,8 @@ const browseQuery = z.object({
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
   capacity: z.coerce.number().int().positive().optional(),
+  // Comma-separated amenity slugs; a listing must have ALL of them.
+  amenities: z.string().trim().min(1).optional(),
   sort: z.enum(['newest', 'price_asc', 'price_desc', 'popular']).default('newest'),
   page: z.coerce.number().int().positive().default(1),
   pageSize: z.coerce.number().int().positive().max(50).default(12),
@@ -36,11 +38,19 @@ listingsRouter.get('/', async (req, res, next) => {
   try {
     const params = browseQuery.parse(req.query);
 
+    const amenitySlugs = params.amenities
+      ? params.amenities.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+
     const where = {
       status: 'approved' as const,
       ...(params.district ? { district: params.district } : {}),
       ...(params.category ? { category: { slug: params.category } } : {}),
       ...(params.capacity ? { capacity: { gte: params.capacity } } : {}),
+      // Require every selected amenity (AND).
+      ...(amenitySlugs.length
+        ? { AND: amenitySlugs.map((slug) => ({ amenities: { some: { amenity: { slug } } } })) }
+        : {}),
       ...(params.minPrice != null || params.maxPrice != null
         ? {
             price: {
@@ -104,7 +114,27 @@ listingsRouter.get('/:slug', async (req, res, next) => {
     });
 
     if (!listing) throw notFound('Listing not found.');
-    res.json({ data: listing });
+
+    // Related listings: same category or district, approved, excluding this one.
+    const related = await prisma.listing.findMany({
+      where: {
+        status: 'approved',
+        id: { not: listing.id },
+        OR: [
+          ...(listing.categoryId ? [{ categoryId: listing.categoryId }] : []),
+          ...(listing.district ? [{ district: listing.district }] : []),
+        ],
+      },
+      orderBy: [{ isFeatured: 'desc' }, { viewCount: 'desc' }],
+      take: 4,
+      include: {
+        category: { select: { name: true, slug: true } },
+        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        vendor: { select: { businessName: true, verificationStatus: true } },
+      },
+    });
+
+    res.json({ data: listing, related });
   } catch (err) {
     next(err);
   }

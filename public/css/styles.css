@@ -101,7 +101,9 @@ textarea { min-height: 110px; resize: vertical; }
   box-shadow: var(--shadow); border: 1px solid var(--ink-100); transition: transform 0.15s, box-shadow 0.15s;
 }
 .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
-.card a { color: inherit; }
+.card, .card:hover, .card a, .card a:hover { text-decoration: none; color: inherit; }
+.card-title { transition: color 0.15s; }
+.card:hover .card-title { color: var(--teal-700); }
 .card-img { aspect-ratio: 4 / 3; background: var(--ink-100); object-fit: cover; width: 100%; }
 .card-body { padding: 14px; }
 .card-title { font-weight: 700; font-size: 1.02rem; margin-bottom: 4px; line-height: 1.3; }

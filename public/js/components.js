@@ -38,6 +38,21 @@ const BMD = {
     return `<span class="badge badge-${BMD.escape(status)}">${BMD.escape(status)}</span>`;
   },
 
+  // Clean line-icons per category (no emoji). Falls back to a map pin.
+  CATEGORY_ICONS: {
+    villas: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
+    dayouts: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1 1M18 18l1 1M19 5l-1 1M6 18l-1 1"/>',
+    pools: '<path d="M2 16c2 0 2 1.5 4 1.5S8 16 10 16s2 1.5 4 1.5 2-1.5 4-1.5 2 1.5 4 1.5"/><path d="M2 20c2 0 2 1.5 4 1.5S8 20 10 20"/><path d="M7 14V5a2 2 0 0 1 4 0M14 14V7"/>',
+    camping: '<path d="M12 4l9 16H3z"/><path d="M12 4v16"/>',
+    farms: '<path d="M11 20A7 7 0 0 1 4 13c4 0 7 3 7 7z"/><path d="M13 20a7 7 0 0 1 7-7c0 4-3 7-7 7z"/><path d="M12 20V9"/>',
+  },
+  icon(slug) {
+    const p =
+      this.CATEGORY_ICONS[slug] ||
+      '<path d="M12 21s-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>';
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+  },
+
   imageUrl(listing) {
     return (listing.images && listing.images[0] && listing.images[0].storageUrl) ||
       'data:image/svg+xml;utf8,' +
@@ -59,9 +74,9 @@ const BMD = {
           <div class="row between" style="margin-bottom:6px">${featured}${verified}</div>
           <div class="card-title">${BMD.escape(l.title)}</div>
           <div class="card-meta">
-            <span>📍 ${BMD.escape(l.district || 'Sri Lanka')}</span>
-            ${l.category ? `<span>• ${BMD.escape(l.category.name)}</span>` : ''}
-            ${l.capacity ? `<span>• 👥 ${l.capacity}</span>` : ''}
+            <span>${BMD.escape(l.district || 'Sri Lanka')}</span>
+            ${l.category ? `<span>· ${BMD.escape(l.category.name)}</span>` : ''}
+            ${l.capacity ? `<span>· Sleeps ${l.capacity}</span>` : ''}
           </div>
           <div class="card-price">${BMD.money(l.price, l.priceUnit)}</div>
         </div>
@@ -114,7 +129,7 @@ const BMD = {
             : '<a href="/vendor/index.html">Become a vendor</a>';
 
       slot.innerHTML = `
-        <a href="/favorites.html">♥ Favorites</a>
+        <a href="/favorites.html">Favorites</a>
         ${dash}
         <a href="#" id="logout-link">Log out</a>`;
       document.getElementById('logout-link').addEventListener('click', async (e) => {

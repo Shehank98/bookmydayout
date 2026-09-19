@@ -8,9 +8,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/styles.css" />
+  <style>
+    .cat-ico { display:grid; place-items:center; height:44px; }
+    .cat-ico svg { width:36px; height:36px; color:var(--teal-600); }
+    .banner-bar { background:var(--teal-700); color:#fff; text-align:center; padding:10px 16px; font-size:0.92rem; }
+    .banner-bar a { color:#a7f3d0; }
+  </style>
 </head>
 <body>
   <div id="header"></div>
+  <div id="banner"></div>
 
   <section class="hero">
     <div class="container">
@@ -63,7 +70,16 @@
   <script src="/js/api.js"></script>
   <script src="/js/components.js"></script>
   <script>
-    const CATEGORY_EMOJI = { villas: '🏡', dayouts: '☀️', pools: '🏊', camping: '⛺', farms: '🚜' };
+    async function loadBanner() {
+      try {
+        const { data } = await API.get('/meta/banners');
+        if (!data.length) return;
+        const b = data[0];
+        document.getElementById('banner').innerHTML =
+          `<div class="banner-bar">${BMD.escape(b.message)}` +
+          (b.linkUrl ? ` <a href="${BMD.escape(b.linkUrl)}">Learn more →</a>` : '') + '</div>';
+      } catch { /* ignore */ }
+    }
 
     async function loadCategories() {
       try {
@@ -72,7 +88,7 @@
         const sel = document.getElementById('s-category');
         grid.innerHTML = data.map((c) => `
           <a class="cat-card" href="/browse.html?category=${encodeURIComponent(c.slug)}">
-            <div class="emoji">${CATEGORY_EMOJI[c.slug] || '📍'}</div>
+            <div class="cat-ico">${BMD.icon(c.slug)}</div>
             <div class="name">${BMD.escape(c.name)}</div>
           </a>`).join('') || '<p class="muted">No categories yet.</p>';
         sel.innerHTML = '<option value="">All categories</option>' +
@@ -118,6 +134,7 @@
       location.href = `/browse.html?${p.toString()}`;
     });
 
+    loadBanner();
     loadCategories();
     loadDistricts();
     loadFeatured();

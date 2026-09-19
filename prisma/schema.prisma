@@ -172,6 +172,7 @@ model Listing {
   district String?
   lat      Decimal? @db.Decimal(10, 7)
   lng      Decimal? @db.Decimal(10, 7)
+  mapUrl   String?  @map("map_url") // vendor-supplied Google Maps link
 
   price     Decimal? @db.Decimal(12, 2)
   priceUnit String?  @map("price_unit")

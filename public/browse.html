@@ -8,6 +8,11 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/styles.css" />
+  <style>
+    .amenity-filter { display:grid; gap:6px; max-height:180px; overflow:auto; }
+    .amenity-filter label { display:flex; align-items:center; gap:8px; font-weight:500; font-size:0.9rem; }
+    .amenity-filter input { width:auto; }
+  </style>
 </head>
 <body>
   <div id="header"></div>
@@ -42,6 +47,10 @@
               <label>Max price</label>
               <input id="f-max" type="number" min="0" placeholder="Any" />
             </div>
+          </div>
+          <div class="field">
+            <label>Amenities</label>
+            <div class="amenity-filter" id="f-amenities"></div>
           </div>
           <button class="btn btn-primary btn-block" type="submit">Apply filters</button>
           <button class="btn btn-ghost btn-block mt-1" type="button" id="clear-filters">Clear</button>
@@ -87,9 +96,10 @@
     }
 
     async function loadFilters() {
-      const [cats, dists] = await Promise.all([
+      const [cats, dists, ams] = await Promise.all([
         API.get('/meta/categories').catch(() => ({ data: [] })),
         API.get('/meta/districts').catch(() => ({ data: [] })),
+        API.get('/meta/amenities').catch(() => ({ data: [] })),
       ]);
       const selc = document.getElementById('f-category');
       selc.innerHTML = '<option value="">All categories</option>' +
@@ -99,6 +109,11 @@
       seld.innerHTML = '<option value="">Any district</option>' +
         dists.data.map((d) => `<option value="${BMD.escape(d.name)}">${BMD.escape(d.name)}</option>`).join('');
       seld.value = BMD.param('district') || '';
+
+      const selected = new Set((BMD.param('amenities') || '').split(',').filter(Boolean));
+      document.getElementById('f-amenities').innerHTML = ams.data.map((a) =>
+        `<label><input type="checkbox" class="am-cb" value="${BMD.escape(a.slug)}" ${selected.has(a.slug) ? 'checked' : ''}> ${BMD.escape(a.name)}</label>`).join('')
+        || '<span class="muted">No amenities</span>';
     }
 
     function currentQuery() {
@@ -111,6 +126,8 @@
         const v = document.getElementById(id).value.trim();
         if (v) p.set(key, v);
       }
+      const ams = Array.from(document.querySelectorAll('.am-cb:checked')).map((c) => c.value);
+      if (ams.length) p.set('amenities', ams.join(','));
       p.set('sort', document.getElementById('sort').value);
       p.set('page', state.page);
       p.set('pageSize', 12);

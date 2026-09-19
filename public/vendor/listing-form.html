@@ -36,6 +36,11 @@
       </div>
 
       <div class="field"><label>Address</label><input id="address" placeholder="Street / area" /></div>
+      <div class="field">
+        <label>Google Maps link</label>
+        <input id="mapUrl" type="url" placeholder="https://maps.google.com/... or https://maps.app.goo.gl/..." />
+        <div class="hint">Open your place in Google Maps, tap Share, and paste the link so guests can find you.</div>
+      </div>
 
       <div class="row">
         <div class="field" style="flex:1"><label>Price (LKR)</label><input id="price" type="number" min="0" /></div>
@@ -128,6 +133,7 @@
       document.getElementById('categoryId').value = l.categoryId || '';
       document.getElementById('district').value = l.district || '';
       address.value = l.address || '';
+      document.getElementById('mapUrl').value = l.mapUrl || '';
       price.value = l.price ?? '';
       if (l.priceUnit) document.getElementById('priceUnit').value = l.priceUnit;
       capacity.value = l.capacity ?? '';
@@ -149,6 +155,7 @@
         categoryId: document.getElementById('categoryId').value || undefined,
         district: document.getElementById('district').value || undefined,
         address: address.value.trim() || undefined,
+        mapUrl: document.getElementById('mapUrl').value.trim() || undefined,
         price: num(price.value),
         priceUnit: document.getElementById('priceUnit').value || undefined,
         capacity: num(capacity.value),

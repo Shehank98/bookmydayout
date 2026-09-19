@@ -50,10 +50,10 @@
       }
       try {
         if (btn.dataset.fav === '1') {
-          await API.del(`/me/favorites/${id}`); btn.dataset.fav = '0'; btn.innerHTML = '♡ Save';
+          await API.del(`/me/favorites/${id}`); btn.dataset.fav = '0'; btn.textContent = 'Save to favorites';
           BMD.toast('Removed from favorites');
         } else {
-          await API.post(`/me/favorites/${id}`); btn.dataset.fav = '1'; btn.innerHTML = '♥ Saved';
+          await API.post(`/me/favorites/${id}`); btn.dataset.fav = '1'; btn.textContent = 'Saved ✓';
           BMD.toast('Saved to favorites');
         }
       } catch (e) { BMD.toast(e.message, true); }
@@ -84,19 +84,19 @@
 
     function contactCard(l) {
       const call = l.contactCall
-        ? `<button class="btn btn-primary btn-block" id="btn-call">📞 Call now</button>` : '';
+        ? `<button class="btn btn-primary btn-block" id="btn-call">Call now</button>` : '';
       const wa = l.contactWhatsapp
-        ? `<button class="btn btn-accent btn-block mt-1" id="btn-wa">💬 WhatsApp</button>` : '';
+        ? `<button class="btn btn-accent btn-block mt-1" id="btn-wa">Message on WhatsApp</button>` : '';
       return `
         <div class="contact-card">
           <div class="price-big">${BMD.money(l.price, l.priceUnit)}</div>
           ${l.capacity ? `<p class="muted">Up to ${l.capacity} guests</p>` : ''}
           <div class="disclaimer">${BMD.DISCLAIMER}</div>
           ${call}${wa}
-          <button class="btn btn-outline btn-block mt-1" id="btn-fav" data-fav="0">♡ Save</button>
+          <button class="btn btn-outline btn-block mt-1" id="btn-fav" data-fav="0">Save to favorites</button>
           <div class="row mt-2" style="justify-content:space-between">
-            <button class="btn btn-ghost btn-sm" id="btn-share">↗ Share</button>
-            <button class="btn btn-ghost btn-sm" id="btn-report">⚑ Report</button>
+            <button class="btn btn-ghost btn-sm" id="btn-share">Share</button>
+            <button class="btn btn-ghost btn-sm" id="btn-report">Report</button>
           </div>
           <hr style="border:0;border-top:1px solid var(--ink-100);margin:16px 0">
           <p class="muted" style="font-size:0.85rem">Listed by</p>
@@ -111,13 +111,21 @@
       const root = document.getElementById('detail-root');
       if (!slug) { root.innerHTML = '<div class="empty">Listing not found.</div>'; return; }
       try {
-        const { data: l } = await API.get(`/listings/${encodeURIComponent(slug)}`);
+        const { data: l, related } = await API.get(`/listings/${encodeURIComponent(slug)}`);
 
         document.getElementById('page-title').textContent = `${l.title} — BookMyDayOut`;
         document.getElementById('meta-desc').setAttribute('content', (l.description || l.title).slice(0, 155));
 
         const amenities = (l.amenities || []).map((a) =>
           `<li>${amenityIcon()} ${BMD.escape(a.amenity.name)}</li>`).join('');
+
+        // Prefer the vendor-supplied Google Maps link; fall back to lat/lng.
+        const mapHref = l.mapUrl || (l.lat && l.lng ? `https://www.google.com/maps?q=${l.lat},${l.lng}` : null);
+        const relatedHtml = (related && related.length) ? `
+          <div class="section" style="padding:36px 0 0">
+            <div class="section-head"><h2>Similar places</h2></div>
+            <div class="grid grid-listings">${related.map(BMD.listingCard).join('')}</div>
+          </div>` : '';
 
         root.innerHTML = `
           <a href="/browse.html" class="muted">← Back to listings</a>
@@ -135,13 +143,14 @@
                 <p style="white-space:pre-wrap;margin-top:8px">${BMD.escape(l.description || 'No description provided.')}</p>
               </div>
               ${amenities ? `<div class="mt-3"><h3>Amenities</h3><ul class="amenity-list">${amenities}</ul></div>` : ''}
-              ${(l.lat && l.lng) ? `<div class="mt-3"><h3>Location</h3>
-                <p class="muted">Approx: ${l.lat}, ${l.lng}</p>
+              ${mapHref ? `<div class="mt-3"><h3>Location</h3>
+                <p class="muted">${BMD.escape(l.address || l.district || 'Sri Lanka')}</p>
                 <a class="btn btn-outline btn-sm mt-1" target="_blank" rel="noopener"
-                   href="https://www.google.com/maps?q=${l.lat},${l.lng}">Open in Google Maps</a></div>` : ''}
+                   href="${BMD.escape(mapHref)}">View location on map</a></div>` : ''}
             </div>
             <div>${contactCard(l)}</div>
-          </div>`;
+          </div>
+          ${relatedHtml}`;
 
         // Wire up actions.
         API.post(`/listings/${l.id}/view`).catch(() => {});
