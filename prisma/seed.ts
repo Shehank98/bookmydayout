@@ -63,9 +63,17 @@ async function main() {
   }
 
   // Demo listings are on by default; set SEED_SAMPLE_DATA=false to skip them
-  // (e.g. once real vendors have signed up).
+  // (e.g. once real vendors have signed up). Non-fatal: a failure here must not
+  // abort seeding the reference data above.
   const withSamples = process.env.SEED_SAMPLE_DATA !== 'false';
-  if (withSamples) await seedSampleListings();
+  if (withSamples) {
+    try {
+      await seedSampleListings();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[seed] Skipped sample listings:', (e as Error).message);
+    }
+  }
 
   // eslint-disable-next-line no-console
   console.log(
