@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment variables & secrets (NEVER commit these)
+.env
+.env.local
+.env.*.local
+*firebase-adminsdk*.json
+serviceAccount*.json
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal

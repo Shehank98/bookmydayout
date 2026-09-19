@@ -1,0 +1,258 @@
+// BookMyDayOut — Prisma schema
+// Everything lives in this single file, as requested ("keep it in one file").
+// Run `npm run prisma:migrate` to create/update the database.
+//
+// Design notes:
+// - Enums replace the raw SQL CHECK constraints from the spec.
+// - The 3–10 images-per-listing rule is enforced in the API layer at submit
+//   time (a relation-count constraint can't be expressed in the DB), see
+//   src/config/env.ts (LISTING_MIN_IMAGES / LISTING_MAX_IMAGES).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------------
+// Enums
+// ------------------------------------------------------------------
+
+enum UserRole {
+  user
+  vendor
+  admin
+}
+
+enum VerificationStatus {
+  pending
+  approved
+  rejected
+}
+
+enum ListingStatus {
+  draft
+  pending
+  approved
+  rejected
+  suspended
+  expired
+}
+
+enum SubscriptionStatus {
+  none
+  active
+  expired
+  cancelled
+}
+
+enum ReportStatus {
+  open
+  dismissed
+  actioned
+}
+
+// ------------------------------------------------------------------
+// Users
+// ------------------------------------------------------------------
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  firebaseUid String   @unique @map("firebase_uid")
+  name        String?
+  email       String?
+  phone       String?
+  role        UserRole @default(user)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  vendor    Vendor?
+  favorites Favorite[]
+  reports   Report[]   @relation("ReportedBy")
+
+  @@map("users")
+}
+
+// ------------------------------------------------------------------
+// Favorites (wishlist) — composite PK (user_id, listing_id)
+// ------------------------------------------------------------------
+
+model Favorite {
+  userId    String   @map("user_id") @db.Uuid
+  listingId String   @map("listing_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@id([userId, listingId])
+  @@map("favorites")
+}
+
+// ------------------------------------------------------------------
+// Vendors
+// ------------------------------------------------------------------
+
+model Vendor {
+  id                 String             @id @default(uuid()) @db.Uuid
+  userId             String             @unique @map("user_id") @db.Uuid
+  businessName       String?            @map("business_name")
+  ownerName          String?            @map("owner_name")
+  contactNumber      String?            @map("contact_number")
+  whatsappNumber     String?            @map("whatsapp_number")
+  email              String?
+  address            String?
+  verificationStatus VerificationStatus @default(pending) @map("verification_status")
+  nicOrBusinessDocUrl String?           @map("nic_or_business_doc_url")
+
+  subscriptionPlanId     String?            @map("subscription_plan_id") @db.Uuid
+  subscriptionStatus     SubscriptionStatus @default(none) @map("subscription_status")
+  subscriptionExpiryDate DateTime?          @map("subscription_expiry_date") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionPlan SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
+  listings         Listing[]
+
+  @@map("vendors")
+}
+
+// ------------------------------------------------------------------
+// Categories & Amenities (admin-configurable)
+// ------------------------------------------------------------------
+
+model Category {
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String  @unique
+  slug     String  @unique
+  icon     String?
+  isActive Boolean @default(true) @map("is_active")
+
+  listings Listing[]
+
+  @@map("categories")
+}
+
+model Amenity {
+  id   String  @id @default(uuid()) @db.Uuid
+  name String  @unique
+  slug String  @unique
+  icon String?
+
+  listings ListingAmenity[]
+
+  @@map("amenities")
+}
+
+// ------------------------------------------------------------------
+// Listings
+// ------------------------------------------------------------------
+
+model Listing {
+  id          String        @id @default(uuid()) @db.Uuid
+  vendorId    String        @map("vendor_id") @db.Uuid
+  title       String
+  slug        String        @unique
+  description String?
+  categoryId  String?       @map("category_id") @db.Uuid
+
+  address  String?
+  district String?
+  lat      Decimal? @db.Decimal(10, 7)
+  lng      Decimal? @db.Decimal(10, 7)
+
+  price     Decimal? @db.Decimal(12, 2)
+  priceUnit String?  @map("price_unit")
+  capacity  Int?
+
+  contactCall     String? @map("contact_call")
+  contactWhatsapp String? @map("contact_whatsapp")
+
+  status          ListingStatus @default(draft)
+  rejectionReason String?       @map("rejection_reason")
+
+  viewCount         Int @default(0) @map("view_count")
+  contactClickCount Int @default(0) @map("contact_click_count")
+  favoriteCount     Int @default(0) @map("favorite_count")
+
+  isFeatured Boolean @default(false) @map("is_featured")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  vendor    Vendor           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  category  Category?        @relation(fields: [categoryId], references: [id])
+  images    ListingImage[]
+  amenities ListingAmenity[]
+  favorites Favorite[]
+  reports   Report[]
+
+  @@index([status])
+  @@index([district])
+  @@index([categoryId])
+  @@index([isFeatured])
+  @@map("listings")
+}
+
+model ListingImage {
+  id         String @id @default(uuid()) @db.Uuid
+  listingId  String @map("listing_id") @db.Uuid
+  storageUrl String @map("storage_url")
+  sortOrder  Int    @default(0) @map("sort_order")
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("listing_images")
+}
+
+model ListingAmenity {
+  listingId String @map("listing_id") @db.Uuid
+  amenityId String @map("amenity_id") @db.Uuid
+
+  listing Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  amenity Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([listingId, amenityId])
+  @@map("listing_amenities")
+}
+
+// ------------------------------------------------------------------
+// Subscription plans
+// ------------------------------------------------------------------
+
+model SubscriptionPlan {
+  id               String   @id @default(uuid()) @db.Uuid
+  name             String
+  price            Decimal  @db.Decimal(12, 2)
+  durationDays     Int      @map("duration_days")
+  listingLimit     Int      @map("listing_limit")
+  featuredIncluded Boolean  @default(false) @map("featured_included")
+  isActive         Boolean  @default(true) @map("is_active")
+
+  vendors Vendor[]
+
+  @@map("subscription_plans")
+}
+
+// ------------------------------------------------------------------
+// Reports / moderation
+// ------------------------------------------------------------------
+
+model Report {
+  id         String       @id @default(uuid()) @db.Uuid
+  listingId  String       @map("listing_id") @db.Uuid
+  reportedBy String?      @map("reported_by") @db.Uuid
+  reason     String?
+  status     ReportStatus @default(open)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  listing  Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reporter User?   @relation("ReportedBy", fields: [reportedBy], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@map("reports")
+}
