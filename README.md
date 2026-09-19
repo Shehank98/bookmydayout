@@ -111,14 +111,18 @@ Shared JS lives in `public/js/`: `config.js` (API + Firebase config),
 `api.js` (fetch + Bearer token), `auth.js` (Firebase Auth wrapper),
 `upload.js` (Storage image upload), `components.js` (header/footer/cards).
 
-## Firebase setup (Auth + Storage)
+## Firebase setup (needed for Google sign-in + image storage only)
+
+Email/password login and browsing work **without** Firebase. Set it up to
+enable Google sign-in and vendor image uploads:
 
 1. In the Firebase console, create a project and a **Web app**. Copy the SDK
    config into `public/js/config.js` (`FIREBASE_CONFIG`). These values are
    public by design — access is controlled by rules, not secrecy.
-2. Enable **Authentication** providers: Email/Password and Google.
-3. Enable **Storage** and deploy the rules in `storage.rules`
-   (`firebase deploy --only storage`).
+2. Enable **Authentication** → **Google** provider (email/password is handled by
+   this backend, so it does not need Firebase).
+3. Enable **Storage**. Uploads go through the backend Admin SDK; the
+   `storage.rules` file is provided if you also want direct client access.
 4. Create a **service account** (Project settings → Service accounts) and set
    the backend env vars `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`,
    `FIREBASE_PRIVATE_KEY` (or `FIREBASE_SERVICE_ACCOUNT_JSON`) and
@@ -143,10 +147,23 @@ npm run prisma:studio     # open the users table, set your row's role = admin
 | GET    | `/api/listings`        | Browse/search **approved** listings    |
 | GET    | `/api/listings/:slug`  | Single approved listing detail         |
 
-Auth model: the frontend gets a Firebase ID token and sends it as
-`Authorization: Bearer <token>`. The backend verifies it, finds-or-creates the
-matching `users` row by `firebase_uid`, and authorizes using the **`role`
-column in Postgres** — never the token's claims.
+### Auth model (two login methods)
+
+- **Email / password** — handled entirely by this backend (no Firebase).
+  `POST /api/auth/register` and `/login` hash with bcrypt and return a backend
+  **JWT** (signed with `JWT_SECRET`). The frontend stores it and sends it as
+  `Authorization: Bearer <token>`.
+- **Google sign-in** — uses Firebase on the frontend; the Firebase ID token is
+  sent as the same Bearer header and verified with the Firebase Admin SDK.
+
+The auth middleware accepts **either** token type, maps it to a `users` row, and
+authorizes using the **`role` column in Postgres** — never the token's claims.
+So Firebase is only required for Google sign-in and image storage; email/password
+login works without it.
+
+**Image uploads** go through the backend (`POST /api/vendor/listings/:id/upload`,
+multipart) which stores them in Firebase Storage via the Admin SDK — so uploads
+work for both login methods, not just Google users.
 
 ---
 

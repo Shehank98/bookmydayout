@@ -19,7 +19,8 @@ CREATE TYPE "ContactChannel" AS ENUM ('call', 'whatsapp');
 -- CreateTable
 CREATE TABLE "users" (
     "id" UUID NOT NULL,
-    "firebase_uid" TEXT NOT NULL,
+    "firebase_uid" TEXT,
+    "password_hash" TEXT,
     "name" TEXT,
     "email" TEXT,
     "phone" TEXT,
@@ -184,6 +185,9 @@ CREATE TABLE "banners" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "users_firebase_uid_key" ON "users"("firebase_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "vendors_user_id_key" ON "vendors"("user_id");

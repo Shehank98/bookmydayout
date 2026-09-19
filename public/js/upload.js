@@ -1,11 +1,10 @@
 /**
- * Firebase Storage uploader for listing images.
+ * Listing image uploader.
  *
- * Images go to  listings/{ownerUid}/{listingId}/{file}  so the Storage rules
- * (which match on request.auth.uid) permit only the owning vendor to write.
- * Returns the public download URLs, which the backend stores in Postgres.
- *
- * Requires firebase-storage-compat.js to be loaded on the page.
+ * Files are sent to the BACKEND (multipart), which stores them in Firebase
+ * Storage via the Admin SDK and saves the image records. This works for both
+ * login methods — email/password (backend JWT) and Google (Firebase) — because
+ * it only needs our Bearer token, not a Firebase client session.
  */
 const Uploader = {
   MAX_BYTES: 5 * 1024 * 1024,
@@ -17,25 +16,23 @@ const Uploader = {
     }
   },
 
-  async uploadListingImages(listingId, files, onProgress) {
-    if (!window.Auth || !Auth.isConfigured()) throw new Error('Firebase is not configured.');
-    const user = Auth.currentUser();
-    if (!user) throw new Error('You must be signed in to upload.');
+  /** Upload files for a listing. Returns the listing's full image list. */
+  async uploadListingImages(listingId, files) {
     this.validate(files);
+    const token = window.Auth ? await Auth.getToken() : null;
+    if (!token) throw new Error('You must be signed in to upload.');
 
-    const storage = firebase.storage();
-    const urls = [];
-    let done = 0;
-    for (const file of files) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `listings/${user.uid}/${listingId}/${Date.now()}_${safeName}`;
-      const ref = storage.ref(path);
-      await ref.put(file);
-      urls.push(await ref.getDownloadURL());
-      done++;
-      if (onProgress) onProgress(done, files.length);
-    }
-    return urls;
+    const form = new FormData();
+    for (const f of files) form.append('images', f);
+
+    const res = await fetch(`${window.APP_CONFIG.API_BASE}/vendor/listings/${listingId}/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` }, // no Content-Type: browser sets the boundary
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Upload failed.');
+    return data.data; // full image list
   },
 };
 

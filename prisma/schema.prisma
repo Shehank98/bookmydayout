@@ -65,13 +65,16 @@ enum ContactChannel {
 // ------------------------------------------------------------------
 
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
-  firebaseUid String   @unique @map("firebase_uid")
-  name        String?
-  email       String?
-  phone       String?
-  role        UserRole @default(user)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id           String   @id @default(uuid()) @db.Uuid
+  // firebase_uid is set for Google (Firebase) sign-ins. Email/password users
+  // authenticate against the backend directly and have a password_hash instead.
+  firebaseUid  String?  @unique @map("firebase_uid")
+  passwordHash String?  @map("password_hash")
+  name         String?
+  email        String?  @unique
+  phone        String?
+  role         UserRole @default(user)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   vendor    Vendor?
   favorites Favorite[]

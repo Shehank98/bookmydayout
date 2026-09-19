@@ -1,12 +1,24 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireVendor } from '../middleware/vendor.js';
 import { asyncHandler, buildListingSlug } from '../lib/utils.js';
-import { badRequest, forbidden, notFound } from '../lib/http-error.js';
-import { deleteObjectsByUrl } from '../lib/storage.js';
+import { badRequest, forbidden, notFound, serviceUnavailable } from '../lib/http-error.js';
+import { deleteObjectsByUrl, isStorageConfigured, uploadImageBuffer } from '../lib/storage.js';
 import { env } from '../config/env.js';
+
+// In-memory upload handling: images are streamed to Firebase Storage, not
+// written to disk. Limited to 5MB and image MIME types.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: env.listings.maxImages },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed.'));
+  },
+});
 
 /**
  * Vendor dashboard API. Every route requires an authenticated user who has a
@@ -305,6 +317,47 @@ vendorRouter.post(
       orderBy: { sortOrder: 'asc' },
     });
     res.status(201).json({ data: images });
+  }),
+);
+
+// POST /api/vendor/listings/:id/upload — multipart image upload (field "images").
+// Uploads through the backend to Firebase Storage so it works for both
+// email/password and Google vendors. Saves image rows and returns them.
+vendorRouter.post(
+  '/listings/:id/upload',
+  upload.array('images', env.listings.maxImages),
+  asyncHandler(async (req, res) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const files = (req.files as Express.Multer.File[]) || [];
+    if (!files.length) throw badRequest('No images uploaded.');
+    if (!isStorageConfigured()) {
+      throw serviceUnavailable('Image storage is not configured on the server yet.');
+    }
+
+    const listing = await getOwnedListing(req.vendor!.id, id);
+    if (listing.images.length + files.length > env.listings.maxImages) {
+      throw badRequest(`A listing can have at most ${env.listings.maxImages} images.`);
+    }
+
+    const ownerRef = req.user!.firebaseUid || req.user!.id;
+    const start = listing.images.length;
+    const created = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i];
+      const safeName = f.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const objectPath = `listings/${ownerRef}/${id}/${Date.now()}_${i}_${safeName}`;
+      const url = await uploadImageBuffer(objectPath, f.buffer, f.mimetype);
+      const row = await prisma.listingImage.create({
+        data: { listingId: id, storageUrl: url, sortOrder: start + i },
+      });
+      created.push(row);
+    }
+
+    const images = await prisma.listingImage.findMany({
+      where: { listingId: id },
+      orderBy: { sortOrder: 'asc' },
+    });
+    res.status(201).json({ data: images, uploaded: created.length });
   }),
 );
 

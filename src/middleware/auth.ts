@@ -3,7 +3,8 @@ import type { UserRole } from '@prisma/client';
 import { verifyIdToken } from '../lib/firebase.js';
 import { isFirebaseConfigured } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
-import { forbidden, serviceUnavailable, unauthorized } from '../lib/http-error.js';
+import { verifyLocalToken } from '../lib/jwt.js';
+import { forbidden, unauthorized } from '../lib/http-error.js';
 
 /**
  * The authenticated user attached to the request.
@@ -12,7 +13,7 @@ import { forbidden, serviceUnavailable, unauthorized } from '../lib/http-error.j
  */
 export interface AuthUser {
   id: string;
-  firebaseUid: string;
+  firebaseUid: string | null;
   email: string | null;
   role: UserRole;
 }
@@ -36,43 +37,62 @@ function extractBearerToken(req: Request): string | null {
 }
 
 /**
- * Verifies the Firebase ID token, then finds-or-creates the matching Postgres
- * user row keyed by firebase_uid. Attaches the row to `req.user`.
+ * Resolve a bearer token to a local user. Accepts EITHER:
+ *   1. a backend JWT (email/password login) — no Firebase needed, or
+ *   2. a Firebase ID token (Google sign-in) — verified with the Admin SDK.
+ * Returns the AuthUser, or null if the token is missing/invalid.
  */
-export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
+async function resolveUser(token: string): Promise<AuthUser | null> {
+  // 1) Try our own JWT first (cheap, offline, covers email/password users).
+  const local = verifyLocalToken(token);
+  if (local) {
+    const user = await prisma.user.findUnique({ where: { id: local.uid } });
+    if (!user) return null;
+    return { id: user.id, firebaseUid: user.firebaseUid, email: user.email, role: user.role };
+  }
+
+  // 2) Otherwise treat it as a Firebase ID token (Google sign-in).
+  if (!isFirebaseConfigured()) return null;
+  let decoded;
   try {
-    if (!isFirebaseConfigured()) {
-      throw serviceUnavailable('Authentication is not configured on the server yet.');
+    decoded = await verifyIdToken(token);
+  } catch {
+    return null;
+  }
+
+  // Find or create the local user row (first-login provisioning). Match an
+  // existing email/password account by email so a person can use both methods.
+  let user = await prisma.user.findUnique({ where: { firebaseUid: decoded.uid } });
+  if (!user && decoded.email) {
+    const byEmail = await prisma.user.findUnique({ where: { email: decoded.email } });
+    if (byEmail) {
+      user = await prisma.user.update({
+        where: { id: byEmail.id },
+        data: { firebaseUid: decoded.uid },
+      });
     }
-
-    const token = extractBearerToken(req);
-    if (!token) throw unauthorized('Missing Bearer token.');
-
-    const decoded = await verifyIdToken(token).catch(() => {
-      throw unauthorized('Invalid or expired token.');
-    });
-
-    // Find or create the local user row (first-login provisioning).
-    const user = await prisma.user.upsert({
-      where: { firebaseUid: decoded.uid },
-      update: {
-        // Keep email in sync if Firebase has one; don't overwrite role/name.
-        ...(decoded.email ? { email: decoded.email } : {}),
-      },
-      create: {
+  }
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
         firebaseUid: decoded.uid,
         email: decoded.email ?? null,
         name: decoded.name ?? null,
       },
     });
+  }
 
-    req.user = {
-      id: user.id,
-      firebaseUid: user.firebaseUid,
-      email: user.email,
-      role: user.role,
-    };
+  return { id: user.id, firebaseUid: user.firebaseUid, email: user.email, role: user.role };
+}
 
+/** Require a valid token (backend JWT or Firebase). Attaches `req.user`. */
+export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
+    const token = extractBearerToken(req);
+    if (!token) throw unauthorized('Missing Bearer token.');
+    const user = await resolveUser(token);
+    if (!user) throw unauthorized('Invalid or expired token.');
+    req.user = user;
     next();
   } catch (err) {
     next(err);
@@ -82,17 +102,13 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 /** Optional auth: attach user if a valid token is present, otherwise continue. */
 export async function optionalAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const token = extractBearerToken(req);
-  if (!token || !isFirebaseConfigured()) {
+  if (!token) {
     next();
     return;
   }
-  // Reuse requireAuth but swallow auth failures for optional routes.
   try {
-    const decoded = await verifyIdToken(token);
-    const user = await prisma.user.findUnique({ where: { firebaseUid: decoded.uid } });
-    if (user) {
-      req.user = { id: user.id, firebaseUid: user.firebaseUid, email: user.email, role: user.role };
-    }
+    const user = await resolveUser(token);
+    if (user) req.user = user;
   } catch {
     // ignore — treat as guest
   }

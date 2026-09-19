@@ -74,9 +74,8 @@
   <script src="/js/config.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
-  <script src="/js/auth.js"></script>
   <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
   <script src="/js/upload.js"></script>
   <script src="/js/components.js"></script>
   <script>
@@ -175,11 +174,10 @@
           id = data.id;
         }
 
-        // Upload any newly-selected images to Firebase Storage, then save URLs.
+        // Upload any newly-selected images (backend stores them + saves records).
         if (pendingFiles.length) {
           BMD.toast(`Uploading ${pendingFiles.length} photo(s)...`);
-          const urls = await Uploader.uploadListingImages(id, pendingFiles);
-          await API.post(`/vendor/listings/${id}/images`, { urls });
+          await Uploader.uploadListingImages(id, pendingFiles);
           pendingFiles = [];
         }
 

@@ -44,7 +44,7 @@
     }
 
     async function toggleFavorite(id, btn) {
-      if (!window.Auth || !Auth.isConfigured() || !Auth.currentUser()) {
+      if (!window.Auth || !Auth.isLoggedIn()) {
         location.href = `/login.html?next=${encodeURIComponent(location.pathname)}`;
         return;
       }

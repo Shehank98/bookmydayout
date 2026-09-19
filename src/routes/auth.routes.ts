@@ -1,15 +1,74 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth } from '../middleware/auth.js';
 import { asyncHandler } from '../lib/utils.js';
-import { badRequest } from '../lib/http-error.js';
+import { signLocalToken } from '../lib/jwt.js';
+import { badRequest, unauthorized } from '../lib/http-error.js';
 
 /**
- * Auth / account routes. All require a valid Firebase token (requireAuth),
- * which also provisions the local users row on first login.
+ * Auth / account routes.
+ *
+ * /register and /login are PUBLIC and use email/password handled entirely by
+ * this backend (no Firebase). They return a backend JWT the frontend stores
+ * and sends as a Bearer token. Google sign-in is handled on the frontend via
+ * Firebase, and those tokens are verified by the auth middleware.
+ *
+ * Everything below `authRouter.use(requireAuth)` needs a valid token.
  */
 export const authRouter = Router();
+
+const credsSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6).max(200),
+  name: z.string().trim().min(1).max(120).optional(),
+});
+
+// POST /api/auth/register — create an email/password account.
+authRouter.post(
+  '/register',
+  asyncHandler(async (req, res) => {
+    const { email, password, name } = credsSchema.parse(req.body);
+    const normalizedEmail = email.toLowerCase();
+
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existing) throw badRequest('An account with this email already exists.');
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { email: normalizedEmail, passwordHash, name: name ?? null },
+    });
+
+    const token = signLocalToken(user.id);
+    res.status(201).json({
+      token,
+      data: { id: user.id, email: user.email, name: user.name, role: user.role },
+    });
+  }),
+);
+
+// POST /api/auth/login — email/password login.
+authRouter.post(
+  '/login',
+  asyncHandler(async (req, res) => {
+    const { email, password } = z
+      .object({ email: z.string().email(), password: z.string().min(1) })
+      .parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    if (!user || !user.passwordHash) throw unauthorized('Invalid email or password.');
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) throw unauthorized('Invalid email or password.');
+
+    const token = signLocalToken(user.id);
+    res.json({
+      token,
+      data: { id: user.id, email: user.email, name: user.name, role: user.role },
+    });
+  }),
+);
 
 authRouter.use(requireAuth);
 

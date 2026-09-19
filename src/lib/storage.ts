@@ -21,6 +21,28 @@ function getBucket() {
 }
 
 /**
+ * Upload an image buffer to Storage via the Admin SDK and return a public URL.
+ * This is used for backend-mediated uploads so that email/password vendors
+ * (who have no Firebase client session) can still add listing photos.
+ */
+export async function uploadImageBuffer(
+  objectPath: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<string> {
+  const bucket = getBucket();
+  if (!bucket) throw new Error('Firebase Storage is not configured on the server.');
+  const file = bucket.file(objectPath);
+  await file.save(buffer, { contentType, resumable: false, metadata: { contentType } });
+  await file.makePublic();
+  return `https://storage.googleapis.com/${bucket.name}/${objectPath}`;
+}
+
+export function isStorageConfigured(): boolean {
+  return getBucket() !== null;
+}
+
+/**
  * Given a Firebase Storage download URL, extract the object path.
  * Handles both the v0 download URL form and gs:// / plain object paths.
  */

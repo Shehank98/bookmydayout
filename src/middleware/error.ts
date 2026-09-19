@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from 'express';
+import { ZodError } from 'zod';
 import { HttpError } from '../lib/http-error.js';
 import { env } from '../config/env.js';
 
@@ -17,6 +18,23 @@ export function errorHandler(
 ): void {
   if (err instanceof HttpError) {
     res.status(err.status).json({ error: err.message, details: err.details });
+    return;
+  }
+
+  // Zod validation errors -> 400 with a readable message.
+  if (err instanceof ZodError) {
+    const first = err.errors[0];
+    const field = first?.path.join('.') || 'input';
+    res.status(400).json({
+      error: `Invalid ${field}: ${first?.message ?? 'validation failed'}`,
+      details: err.errors,
+    });
+    return;
+  }
+
+  // Multer upload errors (file too large, too many files, etc.) -> 400.
+  if (err instanceof Error && err.name === 'MulterError') {
+    res.status(400).json({ error: err.message });
     return;
   }
 

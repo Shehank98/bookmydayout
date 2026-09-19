@@ -75,7 +75,7 @@ const BMD = {
       <header class="site-header">
         <div class="container bar">
           <a class="brand" href="/">
-            <span class="logo">🌴</span>
+            <span class="logo">B</span>
             <span>Book<b>MyDayOut</b></span>
           </a>
           <button class="nav-toggle" aria-label="Menu">☰</button>
@@ -95,9 +95,9 @@ const BMD = {
     // Update auth-aware links.
     const render = async () => {
       const slot = document.getElementById('auth-links');
-      if (!window.Auth || !Auth.isConfigured()) return;
-      const user = await Auth.onReady();
-      if (!user) {
+      if (!window.Auth) return;
+      const loggedIn = await Auth.onReady();
+      if (!loggedIn) {
         slot.innerHTML = '<a href="/login.html">Log in</a>';
         return;
       }
@@ -137,7 +137,7 @@ const BMD = {
           <div class="footer-grid">
             <div>
               <div class="brand" style="color:#fff;margin-bottom:8px">
-                <span class="logo">🌴</span><span>Book<b style="color:#5eead4">MyDayOut</b></span>
+                <span class="logo">B</span><span>Book<b style="color:#5eead4">MyDayOut</b></span>
               </div>
               <p class="muted" style="color:#94a3b8;max-width:340px">
                 Discover villas, dayouts, pools, camping and farm stays across Sri Lanka.

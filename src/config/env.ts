@@ -38,6 +38,10 @@ export const env = {
     .map((o) => o.trim())
     .filter(Boolean),
 
+  // Secret used to sign backend JWTs for email/password login. MUST be set to
+  // a long random string in production. A dev fallback keeps local dev working.
+  jwtSecret: optional('JWT_SECRET', 'dev-insecure-secret-change-me'),
+
   firebase: {
     projectId: optional('FIREBASE_PROJECT_ID'),
     clientEmail: optional('FIREBASE_CLIENT_EMAIL'),
