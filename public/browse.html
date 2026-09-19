@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browse listings — BookMyDayOut</title>
+  <meta name="description" content="Search villas, dayouts and stays across Sri Lanka by location, category, price and capacity." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container section">
+    <div class="browse-layout">
+      <aside class="filters">
+        <h3>Filters</h3>
+        <form id="filter-form">
+          <div class="field">
+            <label>Keyword</label>
+            <input id="f-q" type="text" placeholder="Search..." />
+          </div>
+          <div class="field">
+            <label>District</label>
+            <select id="f-district"><option value="">Any district</option></select>
+          </div>
+          <div class="field">
+            <label>Category</label>
+            <select id="f-category"><option value="">All categories</option></select>
+          </div>
+          <div class="field">
+            <label>Min guests</label>
+            <input id="f-capacity" type="number" min="1" placeholder="Any" />
+          </div>
+          <div class="row">
+            <div class="field" style="flex:1">
+              <label>Min price</label>
+              <input id="f-min" type="number" min="0" placeholder="0" />
+            </div>
+            <div class="field" style="flex:1">
+              <label>Max price</label>
+              <input id="f-max" type="number" min="0" placeholder="Any" />
+            </div>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Apply filters</button>
+          <button class="btn btn-ghost btn-block mt-1" type="button" id="clear-filters">Clear</button>
+        </form>
+      </aside>
+
+      <main>
+        <div class="section-head">
+          <h2 id="results-title">All listings</h2>
+          <div class="field" style="margin:0;min-width:180px">
+            <select id="sort">
+              <option value="newest">Newest</option>
+              <option value="price_asc">Price: low to high</option>
+              <option value="price_desc">Price: high to low</option>
+              <option value="popular">Most popular</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="results"><div class="spinner"></div></div>
+        <div id="pagination" class="row mt-3" style="justify-content:center"></div>
+      </main>
+    </div>
+  </div>
+
+  <div id="footer"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    const state = { page: 1 };
+
+    function readParamsToForm() {
+      document.getElementById('f-q').value = BMD.param('q') || '';
+      document.getElementById('f-capacity').value = BMD.param('capacity') || '';
+      document.getElementById('f-min').value = BMD.param('minPrice') || '';
+      document.getElementById('f-max').value = BMD.param('maxPrice') || '';
+      const sort = BMD.param('sort'); if (sort) document.getElementById('sort').value = sort;
+    }
+
+    async function loadFilters() {
+      const [cats, dists] = await Promise.all([
+        API.get('/meta/categories').catch(() => ({ data: [] })),
+        API.get('/meta/districts').catch(() => ({ data: [] })),
+      ]);
+      const selc = document.getElementById('f-category');
+      selc.innerHTML = '<option value="">All categories</option>' +
+        cats.data.map((c) => `<option value="${BMD.escape(c.slug)}">${BMD.escape(c.name)}</option>`).join('');
+      selc.value = BMD.param('category') || '';
+      const seld = document.getElementById('f-district');
+      seld.innerHTML = '<option value="">Any district</option>' +
+        dists.data.map((d) => `<option value="${BMD.escape(d.name)}">${BMD.escape(d.name)}</option>`).join('');
+      seld.value = BMD.param('district') || '';
+    }
+
+    function currentQuery() {
+      const p = new URLSearchParams();
+      const map = {
+        q: 'f-q', district: 'f-district', category: 'f-category',
+        capacity: 'f-capacity', minPrice: 'f-min', maxPrice: 'f-max',
+      };
+      for (const [key, id] of Object.entries(map)) {
+        const v = document.getElementById(id).value.trim();
+        if (v) p.set(key, v);
+      }
+      p.set('sort', document.getElementById('sort').value);
+      p.set('page', state.page);
+      p.set('pageSize', 12);
+      return p;
+    }
+
+    async function loadResults() {
+      const box = document.getElementById('results');
+      box.innerHTML = '<div class="spinner"></div>';
+      const p = currentQuery();
+      // Reflect filters in the URL (shareable/back-button friendly).
+      history.replaceState(null, '', `/browse.html?${p.toString()}`);
+      try {
+        const { data, pagination } = await API.get(`/listings?${p.toString()}`);
+        document.getElementById('results-title').textContent =
+          `${pagination.total} listing${pagination.total === 1 ? '' : 's'}`;
+        box.innerHTML = data.length
+          ? `<div class="grid grid-listings">${data.map(BMD.listingCard).join('')}</div>`
+          : '<div class="empty">No listings match your filters. Try widening your search.</div>';
+        renderPagination(pagination);
+      } catch (e) {
+        box.innerHTML = '<div class="empty">Could not load listings.</div>';
+      }
+    }
+
+    function renderPagination(pg) {
+      const el = document.getElementById('pagination');
+      if (pg.totalPages <= 1) { el.innerHTML = ''; return; }
+      el.innerHTML = `
+        <button class="btn btn-outline btn-sm" ${pg.page <= 1 ? 'disabled' : ''} id="prev">← Prev</button>
+        <span class="muted">Page ${pg.page} of ${pg.totalPages}</span>
+        <button class="btn btn-outline btn-sm" ${pg.page >= pg.totalPages ? 'disabled' : ''} id="next">Next →</button>`;
+      const prev = document.getElementById('prev'), next = document.getElementById('next');
+      if (prev) prev.onclick = () => { state.page--; loadResults(); window.scrollTo(0, 0); };
+      if (next) next.onclick = () => { state.page++; loadResults(); window.scrollTo(0, 0); };
+    }
+
+    document.getElementById('filter-form').addEventListener('submit', (e) => {
+      e.preventDefault(); state.page = 1; loadResults();
+    });
+    document.getElementById('sort').addEventListener('change', () => { state.page = 1; loadResults(); });
+    document.getElementById('clear-filters').addEventListener('click', () => {
+      location.href = '/browse.html';
+    });
+
+    (async () => {
+      readParamsToForm();
+      await loadFilters();
+      await loadResults();
+    })();
+  </script>
+</body>
+</html>

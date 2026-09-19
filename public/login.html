@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log in — BookMyDayOut</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <h2 id="auth-title" style="margin-bottom:6px">Welcome back</h2>
+      <p class="muted mb-2" id="auth-sub">Log in to save favorites and manage listings.</p>
+
+      <div id="not-configured" class="disclaimer hidden">
+        Firebase Auth isn't configured yet. Add your Firebase web config in
+        <code>public/js/config.js</code> to enable login.
+      </div>
+
+      <form id="auth-form">
+        <div class="field" id="name-field" style="display:none">
+          <label>Name</label>
+          <input id="name" type="text" placeholder="Your name" />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input id="email" type="email" required placeholder="you@example.com" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input id="password" type="password" required minlength="6" placeholder="••••••••" />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="submit-btn">Log in</button>
+      </form>
+
+      <div class="divider">or</div>
+      <button class="btn btn-outline btn-block" id="google-btn">Continue with Google</button>
+
+      <p class="text-center mt-3 muted">
+        <span id="toggle-text">New here?</span>
+        <a href="#" id="toggle-mode">Create an account</a>
+      </p>
+    </div>
+  </div>
+
+  <div id="footer"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    let mode = 'login';
+    const nextUrl = BMD.param('next') || '/';
+
+    if (!Auth.isConfigured()) {
+      document.getElementById('not-configured').classList.remove('hidden');
+    }
+
+    // Already signed in? Bounce to next.
+    Auth.onReady().then((u) => { if (u) location.href = nextUrl; });
+
+    function setMode(m) {
+      mode = m;
+      const isSignup = m === 'signup';
+      document.getElementById('auth-title').textContent = isSignup ? 'Create your account' : 'Welcome back';
+      document.getElementById('submit-btn').textContent = isSignup ? 'Sign up' : 'Log in';
+      document.getElementById('name-field').style.display = isSignup ? 'block' : 'none';
+      document.getElementById('toggle-text').textContent = isSignup ? 'Already have an account?' : 'New here?';
+      document.getElementById('toggle-mode').textContent = isSignup ? 'Log in' : 'Create an account';
+    }
+
+    document.getElementById('toggle-mode').addEventListener('click', (e) => {
+      e.preventDefault(); setMode(mode === 'login' ? 'signup' : 'login');
+    });
+
+    async function afterAuth() {
+      // Ensure the backend user row exists, then redirect.
+      try { await API.get('/auth/me'); } catch { /* ignore */ }
+      location.href = nextUrl;
+    }
+
+    document.getElementById('auth-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!Auth.isConfigured()) return;
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const name = document.getElementById('name').value.trim();
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      try {
+        if (mode === 'signup') await Auth.signUpEmail(email, password, name);
+        else await Auth.signInEmail(email, password);
+        await afterAuth();
+      } catch (err) {
+        BMD.toast(err.message || 'Authentication failed', true);
+        btn.disabled = false;
+      }
+    });
+
+    document.getElementById('google-btn').addEventListener('click', async () => {
+      if (!Auth.isConfigured()) return;
+      try { await Auth.signInGoogle(); await afterAuth(); }
+      catch (err) { BMD.toast(err.message || 'Google sign-in failed', true); }
+    });
+  </script>
+</body>
+</html>

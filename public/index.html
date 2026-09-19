@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BookMyDayOut — Villas & Dayouts across Sri Lanka</title>
+  <meta name="description" content="Discover and browse villas, dayouts, pools, camping and farm stays across Sri Lanka. Contact owners directly — no booking fees." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="header"></div>
+
+  <section class="hero">
+    <div class="container">
+      <h1>Find your perfect dayout or villa in Sri Lanka</h1>
+      <p>Browse villas, pools, camping spots and farm stays. Contact owners directly to check availability and book.</p>
+
+      <form class="search-box" id="search-form">
+        <div class="field">
+          <label>Location</label>
+          <select id="s-district"><option value="">Any district</option></select>
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <select id="s-category"><option value="">All categories</option></select>
+        </div>
+        <div class="field">
+          <label>Keyword</label>
+          <input id="s-q" type="text" placeholder="e.g. beach, pool, Kandy" />
+        </div>
+        <div class="field" style="display:flex;align-items:flex-end">
+          <button class="btn btn-accent btn-block" type="submit">Search</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head"><h2>Browse by category</h2></div>
+      <div class="cat-grid" id="categories"></div>
+    </div>
+  </section>
+
+  <section class="section" style="padding-top:0">
+    <div class="container">
+      <div class="section-head">
+        <h2>Featured stays</h2>
+        <a href="/browse.html">View all →</a>
+      </div>
+      <div id="featured"><div class="spinner"></div></div>
+    </div>
+  </section>
+
+  <div id="footer"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    const CATEGORY_EMOJI = { villas: '🏡', dayouts: '☀️', pools: '🏊', camping: '⛺', farms: '🚜' };
+
+    async function loadCategories() {
+      try {
+        const { data } = await API.get('/meta/categories');
+        const grid = document.getElementById('categories');
+        const sel = document.getElementById('s-category');
+        grid.innerHTML = data.map((c) => `
+          <a class="cat-card" href="/browse.html?category=${encodeURIComponent(c.slug)}">
+            <div class="emoji">${CATEGORY_EMOJI[c.slug] || '📍'}</div>
+            <div class="name">${BMD.escape(c.name)}</div>
+          </a>`).join('') || '<p class="muted">No categories yet.</p>';
+        sel.innerHTML = '<option value="">All categories</option>' +
+          data.map((c) => `<option value="${BMD.escape(c.slug)}">${BMD.escape(c.name)}</option>`).join('');
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadDistricts() {
+      try {
+        const { data } = await API.get('/meta/districts');
+        document.getElementById('s-district').innerHTML =
+          '<option value="">Any district</option>' +
+          data.map((d) => `<option value="${BMD.escape(d.name)}">${BMD.escape(d.name)}</option>`).join('');
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadFeatured() {
+      const box = document.getElementById('featured');
+      try {
+        let { data } = await API.get('/meta/featured');
+        if (!data.length) {
+          // Fall back to newest approved listings if nothing is featured yet.
+          const res = await API.get('/listings?pageSize=8');
+          data = res.data;
+        }
+        box.innerHTML = data.length
+          ? `<div class="grid grid-listings">${data.map(BMD.listingCard).join('')}</div>`
+          : '<div class="empty">No listings yet — check back soon!</div>';
+      } catch (e) {
+        box.innerHTML = '<div class="empty">Could not load listings.</div>';
+      }
+    }
+
+    document.getElementById('search-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const p = new URLSearchParams();
+      const d = document.getElementById('s-district').value;
+      const c = document.getElementById('s-category').value;
+      const q = document.getElementById('s-q').value.trim();
+      if (d) p.set('district', d);
+      if (c) p.set('category', c);
+      if (q) p.set('q', q);
+      location.href = `/browse.html?${p.toString()}`;
+    });
+
+    loadCategories();
+    loadDistricts();
+    loadFeatured();
+  </script>
+</body>
+</html>

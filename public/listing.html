@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title id="page-title">Listing — BookMyDayOut</title>
+  <meta id="meta-desc" name="description" content="View this stay on BookMyDayOut." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container section" id="detail-root">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="lightbox" id="lightbox">
+    <button class="close" aria-label="Close">&times;</button>
+    <img id="lightbox-img" src="" alt="" />
+  </div>
+
+  <div id="footer"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    function getSlug() {
+      const m = location.pathname.match(/\/listing\/([^/?#]+)/);
+      if (m) return decodeURIComponent(m[1]);
+      return BMD.param('slug');
+    }
+
+    function amenityIcon() { return '✓'; }
+
+    async function recordContact(id, channel, target) {
+      try { await API.post(`/listings/${id}/contact`, { channel }); } catch { /* ignore */ }
+      window.location.href = target;
+    }
+
+    async function toggleFavorite(id, btn) {
+      if (!window.Auth || !Auth.isConfigured() || !Auth.currentUser()) {
+        location.href = `/login.html?next=${encodeURIComponent(location.pathname)}`;
+        return;
+      }
+      try {
+        if (btn.dataset.fav === '1') {
+          await API.del(`/me/favorites/${id}`); btn.dataset.fav = '0'; btn.innerHTML = '♡ Save';
+          BMD.toast('Removed from favorites');
+        } else {
+          await API.post(`/me/favorites/${id}`); btn.dataset.fav = '1'; btn.innerHTML = '♥ Saved';
+          BMD.toast('Saved to favorites');
+        }
+      } catch (e) { BMD.toast(e.message, true); }
+    }
+
+    async function reportListing(id) {
+      const reason = prompt('Why are you reporting this listing? (e.g. fraudulent, wrong info)');
+      if (!reason || reason.trim().length < 3) return;
+      try {
+        await API.post(`/listings/${id}/report`, { reason: reason.trim() });
+        BMD.toast('Thanks — our team will review this listing.');
+      } catch (e) { BMD.toast(e.message, true); }
+    }
+
+    function share(title) {
+      const url = location.href;
+      if (navigator.share) { navigator.share({ title, url }).catch(() => {}); }
+      else { navigator.clipboard.writeText(url); BMD.toast('Link copied to clipboard'); }
+    }
+
+    function galleryHtml(images, title) {
+      if (!images.length) return '';
+      const shown = images.slice(0, 5);
+      return `<div class="gallery">${shown.map((img, i) =>
+        `<img src="${BMD.escape(img.storageUrl)}" alt="${BMD.escape(title)} photo ${i + 1}" data-full="${BMD.escape(img.storageUrl)}">`
+      ).join('')}</div>`;
+    }
+
+    function contactCard(l) {
+      const call = l.contactCall
+        ? `<button class="btn btn-primary btn-block" id="btn-call">📞 Call now</button>` : '';
+      const wa = l.contactWhatsapp
+        ? `<button class="btn btn-accent btn-block mt-1" id="btn-wa">💬 WhatsApp</button>` : '';
+      return `
+        <div class="contact-card">
+          <div class="price-big">${BMD.money(l.price, l.priceUnit)}</div>
+          ${l.capacity ? `<p class="muted">Up to ${l.capacity} guests</p>` : ''}
+          <div class="disclaimer">${BMD.DISCLAIMER}</div>
+          ${call}${wa}
+          <button class="btn btn-outline btn-block mt-1" id="btn-fav" data-fav="0">♡ Save</button>
+          <div class="row mt-2" style="justify-content:space-between">
+            <button class="btn btn-ghost btn-sm" id="btn-share">↗ Share</button>
+            <button class="btn btn-ghost btn-sm" id="btn-report">⚑ Report</button>
+          </div>
+          <hr style="border:0;border-top:1px solid var(--ink-100);margin:16px 0">
+          <p class="muted" style="font-size:0.85rem">Listed by</p>
+          <p style="font-weight:700">${BMD.escape(l.vendor?.businessName || 'Vendor')}
+            ${l.vendor?.verificationStatus === 'approved' ? '<span class="badge badge-verified">✓ Verified</span>' : ''}
+          </p>
+        </div>`;
+    }
+
+    async function load() {
+      const slug = getSlug();
+      const root = document.getElementById('detail-root');
+      if (!slug) { root.innerHTML = '<div class="empty">Listing not found.</div>'; return; }
+      try {
+        const { data: l } = await API.get(`/listings/${encodeURIComponent(slug)}`);
+
+        document.getElementById('page-title').textContent = `${l.title} — BookMyDayOut`;
+        document.getElementById('meta-desc').setAttribute('content', (l.description || l.title).slice(0, 155));
+
+        const amenities = (l.amenities || []).map((a) =>
+          `<li>${amenityIcon()} ${BMD.escape(a.amenity.name)}</li>`).join('');
+
+        root.innerHTML = `
+          <a href="/browse.html" class="muted">← Back to listings</a>
+          ${galleryHtml(l.images || [], l.title)}
+          <div class="detail-layout">
+            <div class="detail-body">
+              <div class="row" style="gap:8px;margin-bottom:6px">
+                ${l.category ? `<span class="badge badge-draft">${BMD.escape(l.category.name)}</span>` : ''}
+                ${l.isFeatured ? '<span class="badge badge-featured">★ Featured</span>' : ''}
+              </div>
+              <h1>${BMD.escape(l.title)}</h1>
+              <p class="muted">📍 ${BMD.escape(l.address || l.district || 'Sri Lanka')}</p>
+              <div class="mt-3">
+                <h3>About this place</h3>
+                <p style="white-space:pre-wrap;margin-top:8px">${BMD.escape(l.description || 'No description provided.')}</p>
+              </div>
+              ${amenities ? `<div class="mt-3"><h3>Amenities</h3><ul class="amenity-list">${amenities}</ul></div>` : ''}
+              ${(l.lat && l.lng) ? `<div class="mt-3"><h3>Location</h3>
+                <p class="muted">Approx: ${l.lat}, ${l.lng}</p>
+                <a class="btn btn-outline btn-sm mt-1" target="_blank" rel="noopener"
+                   href="https://www.google.com/maps?q=${l.lat},${l.lng}">Open in Google Maps</a></div>` : ''}
+            </div>
+            <div>${contactCard(l)}</div>
+          </div>`;
+
+        // Wire up actions.
+        API.post(`/listings/${l.id}/view`).catch(() => {});
+        const call = document.getElementById('btn-call');
+        if (call) call.onclick = () => recordContact(l.id, 'call', `tel:${l.contactCall}`);
+        const wa = document.getElementById('btn-wa');
+        if (wa) wa.onclick = () => {
+          const num = String(l.contactWhatsapp).replace(/[^0-9]/g, '');
+          recordContact(l.id, 'whatsapp', `https://wa.me/${num}`);
+        };
+        document.getElementById('btn-fav').onclick = (e) => toggleFavorite(l.id, e.currentTarget);
+        document.getElementById('btn-share').onclick = () => share(l.title);
+        document.getElementById('btn-report').onclick = () => reportListing(l.id);
+
+        // Lightbox.
+        const lb = document.getElementById('lightbox'), lbImg = document.getElementById('lightbox-img');
+        root.querySelectorAll('.gallery img').forEach((img) => {
+          img.onclick = () => { lbImg.src = img.dataset.full; lb.classList.add('open'); };
+        });
+      } catch (e) {
+        root.innerHTML = `<div class="empty">${e.status === 404 ? 'This listing is not available.' : 'Could not load listing.'}</div>`;
+      }
+    }
+
+    const lb = document.getElementById('lightbox');
+    lb.querySelector('.close').onclick = () => lb.classList.remove('open');
+    lb.onclick = (e) => { if (e.target === lb) lb.classList.remove('open'); };
+
+    load();
+  </script>
+</body>
+</html>
