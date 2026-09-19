@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vendor dashboard — BookMyDayOut</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container section" id="root">
+    <div class="spinner"></div>
+  </div>
+
+  <div id="footer"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    const root = document.getElementById('root');
+
+    function becomeVendorForm() {
+      root.innerHTML = `
+        <div class="auth-wrap" style="max-width:560px">
+          <div class="auth-card">
+            <h2>Become a vendor</h2>
+            <p class="muted mb-2">List your villa or dayout. Your account will be reviewed by our team before listings go live.</p>
+            <form id="bv-form">
+              <div class="field"><label>Business name *</label><input id="businessName" required /></div>
+              <div class="field"><label>Owner name</label><input id="ownerName" /></div>
+              <div class="row">
+                <div class="field" style="flex:1"><label>Contact number *</label><input id="contactNumber" required placeholder="+9477..." /></div>
+                <div class="field" style="flex:1"><label>WhatsApp number</label><input id="whatsappNumber" placeholder="+9477..." /></div>
+              </div>
+              <div class="field"><label>Business email</label><input id="email" type="email" /></div>
+              <div class="field"><label>Business address</label><input id="address" /></div>
+              <button class="btn btn-primary btn-block" type="submit">Create vendor account</button>
+            </form>
+          </div>
+        </div>`;
+      document.getElementById('bv-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const body = {
+          businessName: businessName.value.trim(),
+          ownerName: ownerName.value.trim() || undefined,
+          contactNumber: contactNumber.value.trim(),
+          whatsappNumber: whatsappNumber.value.trim() || undefined,
+          email: email.value.trim() || undefined,
+          address: address.value.trim() || undefined,
+        };
+        try { await API.post('/auth/become-vendor', body); BMD.toast('Vendor account created!'); load(); }
+        catch (err) { BMD.toast(err.message, true); }
+      });
+    }
+
+    function statusBanner(v) {
+      if (v.verificationStatus === 'approved') return '';
+      const msg = v.verificationStatus === 'rejected'
+        ? 'Your vendor account was not approved. Please contact support.'
+        : 'Your vendor account is pending verification. You can create listings now; they will be reviewed before going live.';
+      return `<div class="disclaimer">${msg}</div>`;
+    }
+
+    async function subscriptionCard(v) {
+      const { data: plans } = await API.get('/vendor/plans');
+      const current = v.subscriptionPlan;
+      const options = plans.map((p) =>
+        `<option value="${p.id}" ${current && current.id === p.id ? 'selected' : ''}>
+          ${BMD.escape(p.name)} — ${p.price == 0 ? 'Free' : 'LKR ' + Number(p.price).toLocaleString()} (${p.listingLimit >= 9999 ? 'unlimited' : p.listingLimit} listings)
+        </option>`).join('');
+      return `
+        <div class="panel mb-2">
+          <div class="panel-head"><h2>Subscription</h2>
+            <span class="badge badge-${v.subscriptionStatus === 'active' ? 'approved' : 'draft'}">${BMD.escape(v.subscriptionStatus)}</span>
+          </div>
+          <div class="panel-body">
+            <p class="muted mb-2">Current plan: <strong>${current ? BMD.escape(current.name) : 'None'}</strong>
+              ${v.subscriptionExpiryDate ? '· expires ' + new Date(v.subscriptionExpiryDate).toLocaleDateString() : ''}</p>
+            <div class="row">
+              <select id="plan-select" style="max-width:340px">${options}</select>
+              <button class="btn btn-primary" id="subscribe-btn">Select plan</button>
+            </div>
+            <p class="hint">Paid plans are activated by an admin once your bank transfer is confirmed.</p>
+          </div>
+        </div>`;
+    }
+
+    function listingRow(l) {
+      return `<tr>
+        <td><strong>${BMD.escape(l.title)}</strong><br><span class="muted" style="font-size:0.8rem">${BMD.escape(l.district || '')}</span></td>
+        <td>${BMD.statusBadge(l.status)}</td>
+        <td>👁 ${l.viewCount} · 📞 ${l.contactClickCount} · ♥ ${l.favoriteCount}</td>
+        <td class="row">
+          <a class="btn btn-outline btn-sm" href="/vendor/listing-form.html?id=${l.id}">Edit</a>
+          ${['draft', 'rejected'].includes(l.status)
+            ? `<button class="btn btn-primary btn-sm" data-submit="${l.id}">Submit</button>` : ''}
+          <button class="btn btn-danger btn-sm" data-del="${l.id}">Delete</button>
+        </td>
+      </tr>`;
+    }
+
+    async function dashboard(v) {
+      const { data: listings } = await API.get('/vendor/listings');
+      const sub = await subscriptionCard(v);
+      root.innerHTML = `
+        <div class="section-head">
+          <h2>Vendor dashboard</h2>
+          <a class="btn btn-accent" href="/vendor/listing-form.html">+ New listing</a>
+        </div>
+        ${statusBanner(v)}
+        ${sub}
+        <div class="panel">
+          <div class="panel-head"><h2>My listings (${listings.length})</h2></div>
+          <div class="panel-body" style="overflow-x:auto">
+            ${listings.length ? `<table class="data">
+              <thead><tr><th>Listing</th><th>Status</th><th>Performance</th><th>Actions</th></tr></thead>
+              <tbody>${listings.map(listingRow).join('')}</tbody></table>`
+              : '<div class="empty">No listings yet. Click “New listing” to add one.</div>'}
+          </div>
+        </div>`;
+
+      document.getElementById('subscribe-btn').onclick = async () => {
+        try {
+          const r = await API.post('/vendor/subscription', { planId: document.getElementById('plan-select').value });
+          BMD.toast(r.message || 'Plan updated'); load();
+        } catch (e) { BMD.toast(e.message, true); }
+      };
+      root.querySelectorAll('[data-submit]').forEach((b) => b.onclick = async () => {
+        try { const r = await API.post(`/vendor/listings/${b.dataset.submit}/submit`); BMD.toast(r.message); load(); }
+        catch (e) { BMD.toast(e.message, true); }
+      });
+      root.querySelectorAll('[data-del]').forEach((b) => b.onclick = async () => {
+        if (!confirm('Delete this listing? This cannot be undone.')) return;
+        try { await API.del(`/vendor/listings/${b.dataset.del}`); BMD.toast('Listing deleted'); load(); }
+        catch (e) { BMD.toast(e.message, true); }
+      });
+    }
+
+    async function load() {
+      const user = await Auth.requireUser();
+      if (!user) return;
+      try {
+        const me = await API.get('/auth/me');
+        if (!me.data.vendor) { becomeVendorForm(); return; }
+        // Fetch full vendor profile (with plan).
+        const { data: v } = await API.get('/vendor/profile');
+        await dashboard(v);
+      } catch (e) {
+        root.innerHTML = `<div class="empty">${BMD.escape(e.message)}</div>`;
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

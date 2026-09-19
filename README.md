@@ -96,6 +96,43 @@ The whole backend lives in **one folder** (this repo). The schema is a single
 
 ---
 
+## Frontend
+
+The frontend is plain HTML/CSS/JS served by the same Express app (from
+`public/`). No build step. Three interfaces:
+
+| Interface        | Pages                                                                 |
+| ---------------- | -------------------------------------------------------------------- |
+| Public site      | `/` (home), `/browse.html`, `/listing/:slug`, `/login.html`, `/favorites.html` |
+| Vendor dashboard | `/vendor/index.html`, `/vendor/listing-form.html`                    |
+| Admin panel      | `/admin/index.html`                                                  |
+
+Shared JS lives in `public/js/`: `config.js` (API + Firebase config),
+`api.js` (fetch + Bearer token), `auth.js` (Firebase Auth wrapper),
+`upload.js` (Storage image upload), `components.js` (header/footer/cards).
+
+## Firebase setup (Auth + Storage)
+
+1. In the Firebase console, create a project and a **Web app**. Copy the SDK
+   config into `public/js/config.js` (`FIREBASE_CONFIG`). These values are
+   public by design — access is controlled by rules, not secrecy.
+2. Enable **Authentication** providers: Email/Password and Google.
+3. Enable **Storage** and deploy the rules in `storage.rules`
+   (`firebase deploy --only storage`).
+4. Create a **service account** (Project settings → Service accounts) and set
+   the backend env vars `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`,
+   `FIREBASE_PRIVATE_KEY` (or `FIREBASE_SERVICE_ACCOUNT_JSON`) and
+   `FIREBASE_STORAGE_BUCKET`.
+
+### Creating the first admin
+
+Roles live in Postgres. Sign up once through the site, then promote yourself:
+
+```bash
+npm run prisma:studio     # open the users table, set your row's role = admin
+# or with SQL:  UPDATE users SET role = 'admin' WHERE email = 'you@example.com';
+```
+
 ## API (Phase 1)
 
 | Method | Path                   | Notes                                  |
@@ -127,15 +164,20 @@ column in Postgres** — never the token's claims.
 ## Build order / roadmap
 
 - [x] **Phase 1 — Backend scaffold:** Express + TypeScript, Prisma + Postgres, full schema, health + public listing reads.
-- [ ] Phase 2 — Firebase Auth + Storage wiring, auth middleware end-to-end.
-- [ ] Phase 3 — Shared frontend structure (header/footer/nav, design system).
-- [ ] Phase 4 — Public site (homepage, search/browse, listing detail).
-- [ ] Phase 5 — Vendor dashboard (listing CRUD + image upload, 3–10 rule).
-- [ ] Phase 6 — Admin panel (verification queue, vendor/category/amenity mgmt).
-- [ ] Phase 7 — Subscription plan logic (manual activation first).
-- [ ] Phase 8 — Wire public site to the live API (approved only).
-- [ ] Phase 9 — Reporting/flagging, analytics counters, responsive + SEO pass.
-- [ ] Phase 10 — Deploy to Railway.
+- [x] **Phase 2 — Backend API:** auth middleware, vendor + admin + user routes, Firebase Storage helper + rules, subscription-expiry job.
+- [x] **Phase 3–4 — Public site:** shared layout/design system, homepage, search/browse, listing detail (wired to API).
+- [x] **Phase 5 — Vendor dashboard:** listing CRUD + Firebase Storage image upload, 3–10 image + plan-limit rules.
+- [x] **Phase 6 — Admin panel:** verification queue, vendor/category/amenity/district/plan/banner mgmt, reports, users.
+- [x] **Phase 7 — Subscriptions:** manual activation flow + daily expiry job.
+- [x] **Phase 8 — Public site wired to live API** (approved listings only).
+- [x] **Phase 9 — Reporting/flagging, server-side view/contact counters, responsive layout, SEO meta.**
+- [ ] Phase 10 — Deploy to Railway (needs your Firebase + Postgres credentials).
+
+### Not yet done (needs your accounts / later polish)
+- Deploy to Railway + connect a real Firebase project (env vars only — no code changes).
+- Optional: PayHere gateway for paid subscriptions (manual activation works today).
+- Optional: real email provider (approval/rejection emails are stubbed/logged).
+- Optional: Google Analytics/Firebase Analytics, map view, image resize extension.
 
 ## Out of scope
 

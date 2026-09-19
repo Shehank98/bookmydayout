@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Listing editor — BookMyDayOut</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+  <style>
+    .img-thumbs { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .img-thumb { position:relative; width:100px; height:80px; border-radius:8px; overflow:hidden; border:1px solid var(--ink-300); }
+    .img-thumb img { width:100%; height:100%; object-fit:cover; }
+    .img-thumb button { position:absolute; top:2px; right:2px; background:rgba(220,38,38,0.9); color:#fff; border:0; border-radius:50%; width:22px; height:22px; cursor:pointer; }
+    .amenities-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+    .amenities-grid label { display:flex; align-items:center; gap:8px; font-weight:500; }
+    .amenities-grid input { width:auto; }
+  </style>
+</head>
+<body>
+  <div id="header"></div>
+
+  <div class="container section" style="max-width:820px">
+    <a href="/vendor/index.html" class="muted">← Back to dashboard</a>
+    <h2 id="form-title" class="mt-1 mb-2">New listing</h2>
+
+    <div id="notice"></div>
+
+    <form id="listing-form" class="panel"><div class="panel-body">
+      <div class="field"><label>Title *</label><input id="title" required maxlength="160" placeholder="e.g. Cozy Beachfront Villa in Galle" /></div>
+      <div class="field"><label>Description</label><textarea id="description" placeholder="Describe the place, what's included, house rules..."></textarea></div>
+
+      <div class="row">
+        <div class="field" style="flex:1"><label>Category</label><select id="categoryId"><option value="">Select...</option></select></div>
+        <div class="field" style="flex:1"><label>District</label><select id="district"><option value="">Select...</option></select></div>
+      </div>
+
+      <div class="field"><label>Address</label><input id="address" placeholder="Street / area" /></div>
+
+      <div class="row">
+        <div class="field" style="flex:1"><label>Price (LKR)</label><input id="price" type="number" min="0" /></div>
+        <div class="field" style="flex:1"><label>Per</label>
+          <select id="priceUnit"><option value="night">night</option><option value="day">day</option><option value="person">person</option></select>
+        </div>
+        <div class="field" style="flex:1"><label>Max guests</label><input id="capacity" type="number" min="1" /></div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex:1"><label>Call number</label><input id="contactCall" placeholder="+9477..." /></div>
+        <div class="field" style="flex:1"><label>WhatsApp number</label><input id="contactWhatsapp" placeholder="+9477..." /></div>
+      </div>
+
+      <div class="field">
+        <label>Amenities</label>
+        <div class="amenities-grid" id="amenities"></div>
+      </div>
+
+      <div class="field">
+        <label>Photos (3–10 required to submit, max 5MB each)</label>
+        <input id="images" type="file" accept="image/*" multiple />
+        <div class="hint" id="img-hint">Existing and newly selected photos appear below.</div>
+        <div class="img-thumbs" id="thumbs"></div>
+      </div>
+
+      <div class="row mt-2">
+        <button class="btn btn-primary" type="submit" id="save-btn">Save draft</button>
+        <button class="btn btn-accent" type="button" id="save-submit-btn">Save & submit for review</button>
+      </div>
+    </div></form>
+  </div>
+
+  <div id="footer"></div>
+
+  <script src="/js/config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-storage-compat.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/upload.js"></script>
+  <script src="/js/components.js"></script>
+  <script>
+    const listingId = BMD.param('id');
+    let existingImages = []; // {id, storageUrl}
+    let pendingFiles = [];   // File[]
+
+    async function loadSelects() {
+      const [cats, dists, ams] = await Promise.all([
+        API.get('/meta/categories'), API.get('/meta/districts'), API.get('/meta/amenities'),
+      ]);
+      document.getElementById('categoryId').innerHTML = '<option value="">Select...</option>' +
+        cats.data.map((c) => `<option value="${c.id}">${BMD.escape(c.name)}</option>`).join('');
+      document.getElementById('district').innerHTML = '<option value="">Select...</option>' +
+        dists.data.map((d) => `<option value="${BMD.escape(d.name)}">${BMD.escape(d.name)}</option>`).join('');
+      document.getElementById('amenities').innerHTML = ams.data.map((a) =>
+        `<label><input type="checkbox" value="${a.id}" class="amenity-cb"> ${BMD.escape(a.name)}</label>`).join('');
+    }
+
+    function renderThumbs() {
+      const box = document.getElementById('thumbs');
+      const existing = existingImages.map((img) =>
+        `<div class="img-thumb"><img src="${BMD.escape(img.storageUrl)}"><button type="button" data-remove="${img.id}">×</button></div>`).join('');
+      const pending = pendingFiles.map((f, i) =>
+        `<div class="img-thumb"><img src="${URL.createObjectURL(f)}"><button type="button" data-pending="${i}">×</button></div>`).join('');
+      box.innerHTML = existing + pending;
+      box.querySelectorAll('[data-remove]').forEach((b) => b.onclick = async () => {
+        try {
+          await API.del(`/vendor/listings/${listingId}/images/${b.dataset.remove}`);
+          existingImages = existingImages.filter((x) => x.id !== b.dataset.remove);
+          renderThumbs();
+        } catch (e) { BMD.toast(e.message, true); }
+      });
+      box.querySelectorAll('[data-pending]').forEach((b) => b.onclick = () => {
+        pendingFiles.splice(Number(b.dataset.pending), 1); renderThumbs();
+      });
+    }
+
+    document.getElementById('images').addEventListener('change', (e) => {
+      pendingFiles = pendingFiles.concat(Array.from(e.target.files));
+      e.target.value = '';
+      renderThumbs();
+    });
+
+    async function loadExisting() {
+      const { data: l } = await API.get(`/vendor/listings/${listingId}`);
+      document.getElementById('form-title').textContent = 'Edit listing';
+      title.value = l.title || '';
+      description.value = l.description || '';
+      document.getElementById('categoryId').value = l.categoryId || '';
+      document.getElementById('district').value = l.district || '';
+      address.value = l.address || '';
+      price.value = l.price ?? '';
+      if (l.priceUnit) document.getElementById('priceUnit').value = l.priceUnit;
+      capacity.value = l.capacity ?? '';
+      contactCall.value = l.contactCall || '';
+      contactWhatsapp.value = l.contactWhatsapp || '';
+      const chosen = new Set((l.amenities || []).map((a) => a.amenityId || a.amenity.id));
+      document.querySelectorAll('.amenity-cb').forEach((cb) => { cb.checked = chosen.has(cb.value); });
+      existingImages = (l.images || []).map((img) => ({ id: img.id, storageUrl: img.storageUrl }));
+      if (l.status) document.getElementById('notice').innerHTML =
+        `<p class="mb-2">Current status: ${BMD.statusBadge(l.status)} ${l.rejectionReason ? '· <span class="muted">' + BMD.escape(l.rejectionReason) + '</span>' : ''}</p>`;
+      renderThumbs();
+    }
+
+    function collectFields() {
+      const num = (v) => (v === '' ? undefined : Number(v));
+      return {
+        title: title.value.trim(),
+        description: description.value.trim() || undefined,
+        categoryId: document.getElementById('categoryId').value || undefined,
+        district: document.getElementById('district').value || undefined,
+        address: address.value.trim() || undefined,
+        price: num(price.value),
+        priceUnit: document.getElementById('priceUnit').value || undefined,
+        capacity: num(capacity.value),
+        contactCall: contactCall.value.trim() || undefined,
+        contactWhatsapp: contactWhatsapp.value.trim() || undefined,
+        amenityIds: Array.from(document.querySelectorAll('.amenity-cb:checked')).map((c) => c.value),
+      };
+    }
+
+    async function save(submitAfter) {
+      const saveBtn = document.getElementById('save-btn');
+      const subBtn = document.getElementById('save-submit-btn');
+      saveBtn.disabled = subBtn.disabled = true;
+      try {
+        const fields = collectFields();
+        if (!fields.title) throw new Error('Title is required.');
+
+        let id = listingId;
+        if (id) {
+          await API.patch(`/vendor/listings/${id}`, fields);
+        } else {
+          const { data } = await API.post('/vendor/listings', fields);
+          id = data.id;
+        }
+
+        // Upload any newly-selected images to Firebase Storage, then save URLs.
+        if (pendingFiles.length) {
+          BMD.toast(`Uploading ${pendingFiles.length} photo(s)...`);
+          const urls = await Uploader.uploadListingImages(id, pendingFiles);
+          await API.post(`/vendor/listings/${id}/images`, { urls });
+          pendingFiles = [];
+        }
+
+        if (submitAfter) {
+          await API.post(`/vendor/listings/${id}/submit`);
+          BMD.toast('Submitted for review!');
+        } else {
+          BMD.toast('Saved.');
+        }
+        setTimeout(() => (location.href = '/vendor/index.html'), 700);
+      } catch (e) {
+        BMD.toast(e.message, true);
+        saveBtn.disabled = subBtn.disabled = false;
+      }
+    }
+
+    document.getElementById('listing-form').addEventListener('submit', (e) => { e.preventDefault(); save(false); });
+    document.getElementById('save-submit-btn').addEventListener('click', () => save(true));
+
+    (async () => {
+      const user = await Auth.requireUser();
+      if (!user) return;
+      await loadSelects();
+      if (listingId) await loadExisting();
+    })();
+  </script>
+</body>
+</html>
