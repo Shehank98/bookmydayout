@@ -62,12 +62,16 @@ async function main() {
     await prisma.district.upsert({ where: { name }, update: {}, create: { name } });
   }
 
-  await seedSampleListings();
+  // Demo listings are on by default; set SEED_SAMPLE_DATA=false to skip them
+  // (e.g. once real vendors have signed up).
+  const withSamples = process.env.SEED_SAMPLE_DATA !== 'false';
+  if (withSamples) await seedSampleListings();
 
   // eslint-disable-next-line no-console
   console.log(
     `Seeded ${categories.length} categories, ${amenities.length} amenities, ` +
-      `${plans.length} plans, ${districts.length} districts, and sample listings.`,
+      `${plans.length} plans, ${districts.length} districts` +
+      (withSamples ? ', and sample listings.' : ' (sample listings skipped).'),
   );
 }
 

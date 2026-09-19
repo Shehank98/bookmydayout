@@ -172,9 +172,17 @@ work for both login methods, not just Google users.
 1. Create a Railway project and add a **PostgreSQL** plugin. Railway exposes
    `DATABASE_URL` to the service automatically.
 2. Add a service from this repo. Set the remaining variables from
-   `.env.example` (Firebase credentials, `CORS_ORIGINS`, etc.) in the service's
-   **Variables** tab — never commit secrets.
-3. Build command: `npm run build` · Start command: `npm run prisma:deploy && npm start`.
+   `.env.example` (`JWT_SECRET`, Firebase credentials, `CORS_ORIGINS`, etc.) in
+   the service's **Variables** tab — never commit secrets.
+3. `railway.json` already sets the build + start commands, so nothing else is
+   needed: on each deploy it runs **build → migrate → seed → start**
+   (`npm run start:prod`, which is `prisma migrate deploy && prisma db seed &&
+   node dist/index.js`). The seed is idempotent (safe to run every deploy).
+
+To skip the demo listings on deploy, set `SEED_SAMPLE_DATA=false` in Railway
+Variables (reference data — categories, amenities, districts, plans — still
+seeds). `prisma` and `tsx` are runtime dependencies so the release step works
+even if devDependencies are pruned.
 
 ---
 

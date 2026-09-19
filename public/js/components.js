@@ -75,7 +75,6 @@ const BMD = {
       <header class="site-header">
         <div class="container bar">
           <a class="brand" href="/">
-            <span class="logo">B</span>
             <span>Book<b>MyDayOut</b></span>
           </a>
           <button class="nav-toggle" aria-label="Menu">☰</button>
@@ -137,7 +136,7 @@ const BMD = {
           <div class="footer-grid">
             <div>
               <div class="brand" style="color:#fff;margin-bottom:8px">
-                <span class="logo">B</span><span>Book<b style="color:#5eead4">MyDayOut</b></span>
+                <span>Book<b style="color:#5eead4">MyDayOut</b></span>
               </div>
               <p class="muted" style="color:#94a3b8;max-width:340px">
                 Discover villas, dayouts, pools, camping and farm stays across Sri Lanka.
